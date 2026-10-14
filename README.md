@@ -1,43 +1,70 @@
-# Data Engineering & Analytics Portfolio
+# Microsoft Fabric Data Engineering & Analytics Portfolio
 
-A hands-on portfolio showcasing data engineering, analytics, and business application projects built with Microsoft technologies and public datasets.
+A hands-on portfolio project built with Microsoft Fabric and public NYC Yellow Taxi data. The focus is on data engineering practices that go beyond a single report: incremental ingestion, a Bronze/Silver/Gold Lakehouse design, PySpark transformations, data-quality profiling, Delta tables, and documented validation.
 
-## Core Technologies
+## Project 01: NYC Yellow Taxi Data Platform
 
-- Microsoft Fabric
-- PySpark and Python
-- Lakehouse architecture and Delta tables
-- Dataflow Gen2 and Power Query
-- Dimensional data modeling
-- SQL and DAX
-- Power BI
-- Power Apps and Power Automate
+**Status:** Core medallion processing and a separate Data Quality pipeline have been run successfully. Power BI reports and end-to-end orchestration are still in progress.
 
-## Projects
+### Technology
 
-### Project 01: NYC Yellow Taxi Data Engineering
+- Microsoft Fabric Lakehouse and Pipelines
+- PySpark notebooks
+- Delta Lake tables
+- Parquet source files
+- Incremental file processing with JSON manifests
+- Direct Lake semantic models
+- Git and GitHub
 
-An end-to-end data engineering project using the publicly available NYC Yellow Taxi trip dataset for January 2025.
+### Current implementation
 
-**Technologies:** Microsoft Fabric, PySpark, Delta Lake, Dataflow Gen2, Direct Lake semantic models, Power BI.
+- **Bronze ingestion:** checks monthly NYC TLC Parquet source files and uses a manifest to identify new, changed, and unchanged files. Downloads are staged and checked before the manifest is updated.
+- **Silver transformation:** reads Bronze data, applies the timestamp validation rule `tpep_dropoff_datetime >= tpep_pickup_datetime`, and writes the `yellow_taxi_silver` Delta table with per-source-file replacement logic.
+- **Gold transformation:** builds the `yellow_taxi_gold` Delta table from Silver and tracks processed source files in a separate manifest.
+- **Data Quality pipeline:** profiles Silver and creates dedicated Delta tables for rule summaries, exception records, rule counts, a rule bridge, and rule definitions.
+- **Validation:** compares the Data Quality summary and rule-count outputs; the latest run matched all 9 configured rules.
+- **Orchestration:** two Fabric pipelines currently exist and have succeeded independently: `pl_nyc_taxi_medallion` and `pl_nyc_taxi_data_quality`. They are manually triggered and are not yet connected as one end-to-end automated workflow.
 
-**Implemented so far:**
-- Ingested the source Parquet dataset into the Bronze layer.
-- Created a Silver Delta table with basic data quality filtering.
-- Built a Gold fact table and dimension tables.
-- Processed 3,475,102 valid trip records in the Silver layer.
-- Created dimensions for vendors, payment types, taxi zones, and dates.
-- Built a Direct Lake semantic model with relationships between the fact and dimension tables.
-- Investigated data quality issues, including negative fares, missing values, and unusual trip durations.
+### Current scale and latest recorded results
 
-**Next steps:**
-- Complete semantic model design and DAX measures.
-- Build Power BI reports for operations, financial analysis, and data quality.
-- Document data lineage, transformation logic, and design decisions.
-- Publish project documentation and source code.
+| Item | Latest recorded result |
+|---|---:|
+| Monthly source files tracked in Bronze/Silver/Gold | 20 |
+| Silver rows | 78,423,712 |
+| Gold rows | 78,423,712 |
+| Data Quality rules | 9 |
+| Data Quality exception rows | 6,023,630 |
+| Rule-count validations | 9 of 9 matched |
 
-Project details: [`project-01-fabric-data-engineering`](project-01-fabric-data-engineering/)
+The exception table contains trips that violate one or more rules. Rule counts overlap, so they must **not** be summed to estimate unique affected trips.
 
-## About
+### Data Quality findings
 
-This portfolio documents practical implementation of data engineering and analytics solutions using public datasets and Microsoft technologies. The focus is on reproducible workflows, data quality, dimensional modeling, and turning raw data into useful business insights.
+Latest recorded counts include 3,005,888 negative fares, 1,135,505 negative total amounts, 2,355,175 zero-distance trips, 915,742 zero-duration trips, and 28,528 trips lasting more than three hours. These are investigation signals, not automatic proof that a trip is invalid. Financial anomalies are retained for analysis rather than silently removed.
+
+### Planned next steps
+
+1. Optimize Data Quality processing so it does not needlessly rescan the full Silver table.
+2. Finish and validate the Data Quality semantic model relationships.
+3. Build two Power BI reports: Data Quality and Operations/Finance.
+4. Publish the reports together in a Power BI App, where supported by the workspace and licensing.
+5. Connect the two pipelines in a controlled workflow and configure refresh only after capacity and dependencies have been tested.
+6. Export the current Fabric notebooks and replace the outdated exploratory notebook in this repository with the real implementation.
+7. Expand the documentation with lineage, rule definitions, refresh behavior, and validation evidence.
+
+## Repository layout
+
+- `project-01-fabric-data-engineering/docs/architecture.md`: architecture, processing rules, current status, and design decisions.
+- `project-01-fabric-data-engineering/notebooks/`: notebook exports. The existing ingestion notebook is an older exploratory artifact and should not be treated as the current Fabric implementation until replaced with a fresh export.
+- `project-01-fabric-data-engineering/sql/`: currently contains Power Query M (`.pq`) dimension scripts, despite the folder name.
+
+## Data source
+
+NYC Taxi & Limousine Commission (TLC) trip records:
+
+- Official data page: https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page
+- Monthly Yellow Taxi Parquet pattern: `https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_YYYY-MM.parquet`
+
+## Project principle
+
+Keep source data traceable, make transformations rerunnable, validate outputs, and document uncertainty. The repository describes the current implementation honestly: the core pipelines have run successfully, while report development, full orchestration, and refreshed notebook exports remain unfinished.
