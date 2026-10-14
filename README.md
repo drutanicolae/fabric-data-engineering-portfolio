@@ -52,6 +52,11 @@ Latest recorded counts include 3,005,888 negative fares, 1,135,505 negative tota
 6. Export the current Fabric notebooks and replace the outdated exploratory notebook in this repository with the real implementation.
 7. Expand the documentation with lineage, rule definitions, refresh behavior, and validation evidence.
 
+### Latest documentation and evidence
+
+- [Work log — 14 October 2026](project-01-fabric-data-engineering/docs/work-log-2026-10-14.md): explains the five Data Quality tables, latest rule results, validation, screenshots, and next steps.
+- [Fabric screenshots](project-01-fabric-data-engineering/screenshots/): workspace, Lakehouse, medallion processing, pipeline runs, Data Quality results, and semantic models.
+
 ## Repository layout
 
 - `project-01-fabric-data-engineering/docs/architecture.md`: architecture, processing rules, current status, and design decisions.
