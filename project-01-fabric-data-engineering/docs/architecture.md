@@ -119,6 +119,16 @@ The three-hour duration threshold is an investigation threshold chosen for this 
 
 The overall approach is to make data issues visible and preserve evidence, rather than applying unverified business assumptions to financial records.
 
+### How to interpret the five Data Quality outputs
+
+- `dim_dq_rule` is the rule catalogue: what each check means and how it should be interpreted.
+- `dq_summary` is the high-level result table, with one row per rule and issue counts/percentages. It is the preferred source for the overview screenshot and the planned report summary.
+- `dq_exceptions` stores affected trip-level records.
+- `dq_rule_counts` stores compact counts by rule, including rules with zero findings; it is useful for reconciliation.
+- `dq_exception_rule_bridge` stores one row per exception-to-rule association so results can be analyzed by rule.
+
+These tables measure different things. One trip may violate multiple rules, so rule counts overlap and must not be summed to estimate unique affected trips. The latest recorded output contains 6,023,630 exception rows and 7,443,414 exception-rule associations; those are not interchangeable totals. The latest `dq_summary` screenshot shows all nine rules, their counts and percentages, severity, interpretation, and the total row count. See the [14 October work log](work-log-2026-10-14.md) for the explanation and screenshot inventory.
+
 ## 6. Data Quality semantic model
 
 A Direct Lake semantic model named `sm_nyc_taxi_data_quality` has been created, and `dim_dq_rule` has been added to it.
