@@ -1,311 +1,207 @@
-# NYC Yellow Taxi Data Engineering Project
+# NYC Yellow Taxi Data Platform on Microsoft Fabric
 
-## 1. Why I built this project
+## 1. Project overview
 
-This project started as a practical way to explore Microsoft Fabric beyond the usual reporting workflow. I wanted to work with a real dataset, process it at scale, make deliberate decisions about data quality, and build a model that could eventually support meaningful business analysis in Power BI.
+This project uses the public NYC Yellow Taxi trip records to build a layered data platform in Microsoft Fabric. The goal is to demonstrate more than report authoring: repeatable ingestion, PySpark transformations, Delta Lake storage, data-quality rules, validation, orchestration, and an analytics-ready foundation for Power BI.
 
-The dataset comes from New York City's Yellow Taxi trip records for January 2025. It contains millions of trips and enough inconsistencies to make the project more interesting than simply loading data and creating a few charts.
-
-The goal is to build an end-to-end workflow using Microsoft Fabric, PySpark, Delta tables, Dataflow Gen2, dimensional modeling, and Power BI. The project is being developed incrementally, with the code, architecture, and design decisions documented in GitHub.
+The implementation is being built incrementally. The core medallion pipeline and a separate Data Quality pipeline have both completed successful runs. End-to-end orchestration, optimized incremental Data Quality processing, final semantic-model validation, and Power BI reports are still in progress.
 
 ## 2. Technology and environment
 
-The project currently uses:
+- Microsoft Fabric Lakehouse and Data Pipelines
+- PySpark notebooks
+- Parquet source files and Delta Lake tables
+- JSON manifests for tracking source-file processing
+- Direct Lake semantic models
+- Git and GitHub for version control and documentation
 
-- **Microsoft Fabric** for the data engineering and analytics environment.
-- **Fabric Lakehouse** for storing source files and curated Delta tables.
-- **PySpark** for ingestion, transformations, data validation, and fact table creation.
-- **Delta Lake** for the Silver and Gold tables.
-- **Dataflow Gen2 and Power Query M** for creating and transforming dimension tables.
-- **Direct Lake semantic model** for connecting the Gold tables to Power BI.
-- **Git and GitHub** for version control and project documentation.
+The Fabric Lakehouse is named `lh_nyc_taxi`. The main processing notebook is `nb_nyc_taxi_medallion_pipeline`, orchestrated by `pl_nyc_taxi_medallion`. Data Quality processing is implemented in `nb_nyc_taxi_data_quality` and orchestrated separately by `pl_nyc_taxi_data_quality`.
 
-The Fabric workspace is `Nicu-Data-Engineering-Lab`, running on a Fabric trial. The Lakehouse is named `lh_nyc_taxi`.
+Both pipelines are currently triggered manually. They have succeeded independently; they are not yet connected into one automatically orchestrated workflow.
 
-The source notebook is `nb_ingest_nyc_taxi`, and the semantic model is `sm_nyc_taxi_gold`.
+## 3. Data source and current scale
 
-The project source code and documentation are maintained in the `fabric-data-engineering-portfolio` GitHub repository.
-
-## 3. Data source
-
-The project uses the publicly available NYC Yellow Taxi trip record dataset for January 2025.
+The project uses the public NYC TLC Yellow Taxi monthly Parquet files.
 
 - Official TLC data page: https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page
-- January 2025 Parquet file: https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2025-01.parquet
-- Taxi zone lookup: https://d37ci6vzurychx.cloudfront.net/misc/taxi_zone_lookup.csv
+- Source URL pattern: `https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_YYYY-MM.parquet`
 
-The trip records contain information such as pickup and drop-off timestamps, locations, vendor identifiers, passenger counts, trip distances, payment types, fares, tips, and other charges.
+The ingestion process currently tracks 20 monthly source files. The latest recorded Silver and Gold table counts are both **78,423,712 rows**. These are the results of the latest successful processing run, not a guarantee that the public source will always expose the same number of files or rows.
 
-The zone lookup provides the borough, zone name, and service zone associated with each taxi location identifier.
+## 4. Medallion architecture
 
-For the initial version, I deliberately limited the scope to one month. This makes it possible to validate the entire workflow before expanding it to additional months and implementing a repeatable update process.
+### Bronze: source preservation and ingestion
 
-## 4. Architecture: Bronze, Silver, and Gold
+Bronze files are stored under:
 
-The Lakehouse follows a layered architecture. Each layer has a different purpose, rather than treating every transformation as part of one large query.
+- `Files/bronze/yellow_taxi`
+- Staging area: `Files/bronze/yellow_taxi_staging`
 
-### Bronze: raw source data
+A JSON manifest is stored at `Files/metadata/yellow_taxi_source_manifest.json`.
 
-The original January 2025 trip data is stored as a Parquet file at:
+The ingestion notebook checks the monthly source files and compares available metadata such as ETag, last-modified time, and content length with the manifest. New or changed files are downloaded; unchanged files are skipped. Downloads are staged and size-checked before being moved into the Bronze area. The manifest is updated only after successful processing of the file.
 
-`Files/bronze/yellow_tripdata_2025-01.parquet`
+This makes ingestion rerunnable and avoids downloading every unchanged month on each run. In the latest recorded Bronze check, 20 files were available, 20 were skipped as unchanged, and no files failed or needed downloading.
 
-The taxi zone lookup is stored separately at:
+The manifest is operational metadata used to track source-file state. It is not the source dataset itself.
 
-`Files/reference/taxi_zone_lookup.csv`
+### Silver: validated trip records
 
-The raw trip file is retained as the starting point for downstream processing. Keeping the source separate from cleaned data makes it easier to investigate unexpected results and compare transformations with the original records.
+Silver is persisted as the Delta table `yellow_taxi_silver`. Its processing manifest is:
 
-### Silver: cleaned trip records
+`Files/metadata/yellow_taxi_silver_manifest.json`
 
-The notebook reads the Bronze Parquet file with PySpark and creates the `yellow_taxi_silver` Delta table.
+The transformation reads the available Bronze files, aligns columns with `unionByName(..., allowMissingColumns=True)`, and applies a conservative timestamp rule:
 
-The initial source contained 3,475,226 records. I identified and excluded 124 records where the drop-off timestamp was earlier than the pickup timestamp.
+```text
+tpep_dropoff_datetime >= tpep_pickup_datetime
+```
 
-The resulting Silver table contains **3,475,102 records across 20 columns**.
+Rows that fail this chronological check are excluded. Other unusual values, including negative financial amounts and zero distances, are retained for profiling instead of being silently removed.
 
-This filtering rule addresses a clear chronological inconsistency without removing records simply because their financial values look unusual.
+For the initial January 2025 validation, Bronze contained 3,475,226 rows and Silver contained 3,475,102 rows. The 124 rejected rows represented approximately 0.0036% of that month's input. The broader multi-file Silver table now contains 78,423,712 rows.
 
-Silver is the cleaned trip-level dataset used by the downstream Gold transformations.
+Processing is tracked by source file, and the notebook uses per-file replacement logic so a changed source month can be reprocessed without blindly appending duplicate copies of that month's records.
 
-### Gold: analytics-ready tables
+### Gold: analytics-ready trip table
 
-The Gold layer separates trip-level facts from descriptive dimensions.
+Gold is persisted as the Delta table `yellow_taxi_gold`. Its processing manifest is:
 
-| Table | Purpose | Current row count |
+`Files/metadata/yellow_taxi_gold_manifest.json`
+
+Gold is built from Silver and uses per-source-file replacement logic and a rule-version marker (`GOLD_RULE_VERSION=2`) to track the processing state. The latest recorded Gold row count is 78,423,712, matching Silver for the current run.
+
+A lineage check previously confirmed that Bronze, Silver, and Gold each tracked the same 20 source files, with no missing files or metadata mismatches. A subsequent no-op Gold run reported that the data was already up to date.
+
+The Gold table is the intended analytical trip-level output. The Data Quality tables described below are separate outputs for monitoring and investigation.
+
+## 5. Data Quality profiling and outputs
+
+Data Quality is implemented in a separate notebook and pipeline so that the full-table profiling workload can be run independently from the medallion transformations.
+
+The current notebook creates these Lakehouse Delta tables:
+
+| Table | Purpose |
+|---|---|
+| `dim_dq_rule` | Rule definitions, severity, and descriptions |
+| `dq_summary` | One summary row per rule, including issue count and percentage |
+| `dq_exceptions` | Trip-level records that violate one or more configured rules |
+| `dq_rule_counts` | Exception counts by rule, including rules with zero findings |
+| `dq_exception_rule_bridge` | One row per exception-to-rule association, created by splitting the exception rule list |
+
+The latest recorded run produced 9 rule definitions, 9 summary rows, 9 rule-count rows, 6,023,630 exception rows, and 7,443,414 bridge rows. All 9 rule counts matched the corresponding summary counts in the validation output. The orphan-rule checks for the summary, rule-count, and bridge tables returned zero.
+
+### Current rules and latest recorded counts
+
+| Rule | Condition | Count |
 |---|---|---:|
-| `FactTaxiTrips` | Trip-level facts and numeric measures | 3,475,102 |
-| `DimTaxiZone` | Taxi location, borough, and zone descriptions | 265 |
-| `DimVendor` | Vendor identifiers and descriptive attributes | 4 |
-| `DimPaymentType` | Payment codes and analyst-defined classifications | 6 |
-| `DimDate` | Calendar attributes for date-based analysis | 366 |
+| `NEGATIVE_FARE` | Fare amount below zero | 3,005,888 |
+| `NEGATIVE_TOTAL` | Total amount below zero | 1,135,505 |
+| `NEGATIVE_TIP` | Tip amount below zero | 2,576 |
+| `NEGATIVE_DISTANCE` | Trip distance below zero | 0 |
+| `ZERO_DISTANCE` | Trip distance equals zero | 2,355,175 |
+| `NULL_FARE` | Fare amount is null | 0 |
+| `NULL_TOTAL` | Total amount is null | 0 |
+| `ZERO_DURATION` | Calculated trip duration equals zero | 915,742 |
+| `LONG_DURATION` | Calculated trip duration exceeds three hours | 28,528 |
 
-`FactTaxiTrips` and `DimTaxiZone` are generated in the PySpark notebook. The other three dimensions are created through Dataflow Gen2, using Power Query M.
+Counts are not mutually exclusive. A trip can violate multiple rules, so the counts must not be added together to estimate the number of unique affected trips. The exception table contains trips with one or more configured exceptions.
 
-The date dimension covers December 31, 2024, through December 31, 2025. The extra day at the beginning is intentional: some trips in the January dataset started on December 31 and continued into January.
+The three-hour duration threshold is an investigation threshold chosen for this project, not an official NYC TLC business rule. Likewise, a negative amount or zero distance is a signal to investigate, not by itself proof that the source record is invalid.
 
-The Gold tables are the intended source for the semantic model, rather than the raw files or intermediate Silver table.
+### Interpretation and data-handling decisions
 
-## 5. Dataflow Gen2 and dimension design
+- **Negative financial values:** retained for investigation. They may reflect reversals or adjustments, but that interpretation requires confirmation.
+- **Zero distance and zero duration:** retained and surfaced as data-quality findings rather than automatically excluded.
+- **Long trips:** flagged using the current three-hour threshold for further review.
+- **Missing attributes:** some records have nulls in several fields at once, including `passenger_count`, `RatecodeID`, `store_and_fwd_flag`, `congestion_surcharge`, and `Airport_fee`. These values should not automatically be replaced with zero without understanding their meaning.
+- **Duplicates:** the earlier Silver profiling run found no exact duplicate rows in that profiled dataset. This should be treated as a result of that check, not a guarantee about future source files.
 
-Dataflow Gen2 is used to create reusable dimension tables from the Silver data and to maintain the transformation logic separately from the main PySpark notebook.
+The overall approach is to make data issues visible and preserve evidence, rather than applying unverified business assumptions to financial records.
 
-### DimVendor
+## 6. Data Quality semantic model
 
-The vendor dimension is derived from the distinct vendor identifiers present in Silver. It currently contains four vendors:
+A Direct Lake semantic model named `sm_nyc_taxi_data_quality` has been created, and `dim_dq_rule` has been added to it.
 
-- Vendor 1: Creative Mobile Technologies, LLC
-- Vendor 2: Curb Mobility, LLC
-- Vendor 6: Myle Technologies Inc
-- Vendor 7: Helix
+The intended relationships are one-to-many, with single-direction filtering from `dim_dq_rule[rule_id]` to each rule-level table:
 
-The dimension also contains descriptive text identifying the records as TPEP providers identified by NYC TLC. These descriptions are portfolio documentation, not official TLC descriptions of each vendor's role.
+- `dq_summary[rule_id]`
+- `dq_rule_counts[rule_id]`
+- `dq_exception_rule_bridge[rule_id]`
 
-### DimPaymentType
+Relationship validation and replacement of any earlier manually created DAX rule table should be completed before treating the model as finalized.
 
-The payment dimension contains the six payment codes found in the source, from 0 to 5.
+Do not join the bridge to `dq_exceptions` on `source_file` alone: that column is not a unique trip key. Also, `exception_rules` in `dq_exceptions` is a comma-separated list, not a single rule key. The bridge represents exception-to-rule associations and needs a reliable trip-level key if it is to be related back to individual exception rows.
 
-In addition to the original payment code, I added three descriptive attributes:
+The Gold semantic model and the Data Quality semantic model serve different purposes. The first supports operational and financial analysis; the second is intended for quality monitoring and investigation.
 
-- `PaymentTypeName`
-- `PaymentCategory`
-- `IsStandardPayment`
+## 7. Orchestration and refresh status
 
-The names map the source codes to readable labels, including credit card, cash, no charge, dispute, unknown, and unspecified or missing.
+Two Fabric pipelines exist:
 
-The category groups payment types into broader analytical categories. The standard-payment flag identifies credit card and cash transactions.
+1. `pl_nyc_taxi_medallion` runs `nb_nyc_taxi_medallion_pipeline`.
+2. `pl_nyc_taxi_data_quality` runs `nb_nyc_taxi_data_quality`.
 
-These categories and the standard-payment flag are analyst-defined classifications. They should not be interpreted as official TLC business rules.
+Both have completed successful runs when triggered independently. The Data Quality notebook currently scans the full Silver table and rebuilds its output tables. Because this is a large workload and the Fabric capacity has returned throttling errors for separate Spark jobs in earlier testing, Data Quality processing should be optimized and tested before adding it to the main workflow or scheduling frequent runs.
 
-### DimDate
+The intended future dependency is:
 
-The date dimension is generated using Power Query M and includes a date key in `yyyyMMdd` integer format.
+```text
+Bronze ingestion
+    -> Silver transformation
+        -> Gold transformation
+            -> Data Quality processing
+                -> semantic model/report availability
+```
 
-It provides the basis for calendar-based analysis and will be extended with additional attributes, such as month names and day-of-week labels, for reporting.
+This is the planned sequence, not the current deployed orchestration. At present, the medallion and Data Quality pipelines are separate and manually triggered. A parent pipeline, scheduled execution, and automated semantic-model refresh have not yet been confirmed as implemented.
 
-The model still needs its final date-related design, including how pickup and drop-off dates will be handled separately.
+## 8. Validation evidence
 
-## 6. Data quality: what the data actually looks like
+The latest recorded checks include:
 
-An important part of the project has been investigating the source data rather than assuming every record represents a normal, completed taxi trip.
+- Bronze, Silver, and Gold track 20 monthly source files.
+- The latest Silver and Gold row counts both equal 78,423,712.
+- A repeated Gold run can report that the data is already up to date.
+- Data Quality generated all five output tables.
+- All 9 `dq_rule_counts` results matched the corresponding `dq_summary` counts.
+- Orphan-rule checks for `dq_summary`, `dq_rule_counts`, and `dq_exception_rule_bridge` returned zero.
 
-The initial profiling identified several patterns worth documenting.
+These checks validate the recorded run outputs. They do not replace future monitoring, source-file change handling, or model-level relationship validation.
 
-### Missing values
+## 9. Repository contents and source-code status
 
-Approximately 540,031 records contain null values simultaneously in the following five columns:
+The repository currently contains this architecture document, Power Query M dimension scripts, and an older exploratory notebook named `nb_ingest_nyc_taxi.ipynb`.
 
-- `passenger_count`
-- `RatecodeID`
-- `store_and_fwd_flag`
-- `congestion_surcharge`
-- `Airport_fee`
+**Important:** that notebook is not the current implementation of the working Fabric medallion pipeline. It should not be presented as production-ready code. The next repository task is to export the current notebooks from Fabric and replace or clearly archive the outdated exploratory artifact. Documentation should describe the working notebooks, not imply that an old export contains the current implementation.
 
-Because these missing values occur together, I have not automatically replaced them with zero or removed the affected records. Doing so could change the meaning of the data without sufficient evidence.
+The `.pq` files in the existing `sql` directory contain Power Query M, not SQL. The directory can be renamed or reorganized later once the current notebook exports are in place.
 
-### Negative financial amounts
+## 10. Power BI reporting roadmap
 
-The dataset contains approximately:
+Two reports are planned:
 
-- 144,118 records with negative fares.
-- 63,037 records with negative total amounts.
-- 124 records with negative tips.
+### Data Quality
 
-Negative values require investigation, but they are not automatically proof of bad data. Some may represent reversals or adjustments, although that interpretation has not yet been confirmed.
-
-The negative fares total approximately -$1.68 million, while negative total amounts sum to approximately -$1.66 million.
-
-### Zero distances and unusual durations
-
-The profiling also identified:
-
-- 90,893 records with zero trip distance.
-- 1,927 trips with zero calculated duration.
-- 1,377 trips lasting more than three hours.
-- A maximum observed duration of approximately 93.8 hours.
-
-The three-hour threshold is an investigation threshold used during profiling, not an official business rule.
-
-These records have been retained for investigation rather than excluded through arbitrary thresholds.
-
-### Potential reversals or adjustments
-
-A further investigation found 59,294 groups of records with both positive and negative fares. Of these, 59,291 groups contained exactly two records with opposite fare signs.
-
-Some examples share the same pickup and drop-off timestamps and trip distances while showing opposite financial amounts. This pattern could indicate reversals or adjustments, but the available evidence does not establish that interpretation conclusively.
-
-For that reason, I have not removed these records or treated them as confirmed duplicates.
-
-There were no exact duplicate records identified in the Silver dataset.
-
-### Overall approach
-
-The data quality strategy is conservative: remove records only when a clear rule supports doing so, document anomalies, and avoid silently changing financial values.
-
-This keeps the processing decisions transparent and makes the remaining issues available for further analysis in Power BI.
-
-## 7. Semantic model
-
-The semantic model, `sm_nyc_taxi_gold`, uses the Gold tables and the Direct Lake storage mode.
-
-The current model contains active, one-to-many relationships with single-direction filtering:
-
-| Dimension | Dimension key | Fact key |
-|---|---|---|
-| `DimVendor` | `VendorID` | `FactTaxiTrips[VendorID]` |
-| `DimPaymentType` | `payment_type` | `FactTaxiTrips[payment_type]` |
-| `DimTaxiZone` | `LocationID` | `FactTaxiTrips[PULocationID]` |
-| `DimDate` | `DateKey` | `FactTaxiTrips[PickupDateKey]` |
-
-The pickup date and pickup location relationships are the active paths in the current model.
-
-The fact table also contains drop-off dates and locations. Their relationships and role-playing dimension design still need to be completed. This will allow pickup and drop-off analysis without introducing ambiguous filter paths.
-
-### Key integrity
-
-I checked the fact table keys against their corresponding dimensions. All six checks returned zero unmatched keys:
-
-- Vendor identifiers.
-- Payment type codes.
-- Pickup location identifiers.
-- Drop-off location identifiers.
-- Pickup date keys.
-- Drop-off date keys.
-
-These checks provide confidence that the current fact records can be matched to the relevant dimension records.
-
-## 8. Business and design decisions
-
-Several decisions have shaped the project so far.
-
-**Start with one month of data.** January 2025 is the initial scope. The priority was to build and validate the complete processing path before expanding the dataset.
-
-**Keep raw data separate from curated tables.** Bronze preserves the source, Silver applies basic cleaning, and Gold prepares the data for analytical use.
-
-**Use PySpark for the large trip dataset.** The trip records are processed in Fabric rather than being manually reshaped in Excel.
-
-**Use Dataflow Gen2 for selected dimensions.** This separates Power Query transformations from the main notebook and makes the dimension logic easier to inspect.
-
-**Build a dimensional model.** A central fact table with descriptive dimensions provides a cleaner foundation for reusable DAX measures and multiple reports.
-
-**Do not automatically discard financial anomalies.** Negative fares, zero distances, missing values, and unusual durations are documented for investigation rather than removed without evidence.
-
-**Separate source attributes from analytical classifications.** Payment categories and the standard-payment flag are explicitly identified as analyst-defined logic.
-
-**Keep the implementation reproducible.** Notebook code, Power Query scripts, and architecture documentation are version-controlled in GitHub.
-
-## 9. Current implementation status
-
-The following components have been implemented:
-
-- Loaded the January 2025 Parquet dataset into Bronze.
-- Stored the taxi zone lookup in the Lakehouse.
-- Created the Silver Delta table and applied the initial timestamp validation rule.
-- Created the Gold fact table and taxi zone dimension.
-- Created vendor, payment type, and date dimensions using Dataflow Gen2.
-- Created a Direct Lake semantic model from the Gold tables.
-- Established the current active relationships.
-- Validated fact-to-dimension key integrity.
-- Investigated key data quality patterns.
-- Exported the ingestion notebook and selected Power Query M scripts to GitHub.
-
-The repository currently contains the exported notebook and dimension scripts. The architecture document is being added to make the implementation and its design decisions easier to understand.
-
-## 10. Next steps: refresh and data updates
-
-The initial data engineering workflow is in place, but the update process is not yet automated.
-
-The next stage is to make the project repeatable, so that future data can be processed without manually rebuilding the entire workflow.
-
-Planned work includes:
-
-1. **Design a repeatable ingestion process.** Establish how new monthly Parquet files will be discovered, downloaded, and stored in Bronze.
-2. **Configure orchestration and scheduled execution.** Determine which steps should run in sequence and configure a Fabric schedule where supported by the current trial and item configuration.
-3. **Define refresh dependencies.** Ensure ingestion completes before Silver and Gold transformations, dimension updates, and downstream model availability.
-4. **Make processing safe to rerun.** Avoid duplicate records if a monthly file is processed more than once. Define how existing months will be handled if source files change.
-5. **Validate each update.** Record row counts, rejected records, missing keys, and other quality checks after processing.
-6. **Complete the semantic model.** Add the drop-off date and location analysis paths and implement the required DAX measures.
-7. **Build the Power BI reports.** Create separate views for data quality and profiling, and for operational and financial analysis.
-8. **Document the refresh strategy.** Record the schedule, dependencies, failure handling, and the process for adding new months.
-
-The refresh schedule and automated data update process have **not been configured yet**. They are the next implementation milestone, not completed features.
-
-## 11. Planned reporting
-
-The project is intended to support two complementary Power BI reports.
-
-### Data Quality and Profiling
-
-This report will focus on record counts, missing values, negative financial amounts, unusual trip durations, zero distances, and the results of the validation rules.
+Intended content includes issue counts and percentages by rule, exception trends, source-file comparisons, severity, and detail views for investigating affected trips. It will use the Data Quality semantic model and its rule dimension.
 
 ### Operations and Finance
 
-This report will focus on trip volumes, pickup and drop-off patterns, vendor activity, payment methods, trip distance, duration, fares, tips, and total amounts.
+Intended content includes trip volume, pickup and drop-off patterns, trip distance and duration, payment methods, vendor activity, fares, tips, and total amounts. It will use the Gold analytical data model.
 
-The reports will be built on the same semantic model, with reusable measures and consistent definitions.
+The plan is to publish both reports together in a Power BI App if the workspace configuration and licensing support the intended sharing experience. Neither report should be described as complete until the report pages, measures, and model behavior have been validated.
 
-## 12. Repository structure
+## 11. Next implementation milestones
 
-The project source is maintained in GitHub:
-
-```text
-fabric-data-engineering-portfolio/
-├── README.md
-└── project-01-fabric-data-engineering/
-    ├── notebooks/
-    │   └── nb_ingest_nyc_taxi.ipynb
-    ├── sql/
-    │   ├── dim_payment_type.pq
-    │   ├── dim_vendor.pq
-    │   └── dim_date.pq
-    └── docs/
-        └── architecture.md
-```
-
-The `.pq` files contain Power Query M code, despite being stored in a folder currently named `sql`. That folder name can be revisited as the repository grows.
+1. Optimize the Data Quality notebook, ideally avoiding a full Silver rescan when only a subset of source files changes.
+2. Validate the new `dim_dq_rule` relationships in `sm_nyc_taxi_data_quality` and remove the old manual DAX table only after the replacement works.
+3. Export the current Fabric notebooks and add the real source to GitHub.
+4. Build and validate the Data Quality report.
+5. Build and validate the Operations and Finance report.
+6. Test a controlled parent pipeline that runs the medallion process before Data Quality, taking Fabric capacity limits into account.
+7. Configure scheduling and semantic-model refresh only after dependency and failure behavior have been tested.
+8. Keep documenting row counts, rule results, and decisions as the implementation evolves.
 
 ## Final note
 
-This is an evolving project, not a claim that every part of a production data platform is already complete. The first milestone was to get real data through a layered architecture, investigate its quality, and create an analytical model.
-
-The next milestone is to automate the process of keeping that model up to date and then build reports on top of it. The goal is to show not only the final result, but also the technical decisions and trade-offs behind it.
+This is an evolving portfolio project. The current milestone demonstrates multi-file ingestion tracking, Bronze/Silver/Gold Delta processing, a separate Data Quality pipeline, and explicit validation of its rule outputs. Full orchestration, optimized incremental profiling, finalized semantic-model relationships, report development, and current notebook exports remain outstanding work.
