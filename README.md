@@ -6,7 +6,7 @@ The emphasis is on engineering decisions, rerunnable processing, validation, and
 
 ## Project 01: NYC Yellow Taxi Data Platform
 
-**Status:** The medallion processing layer, separate Data Quality pipeline, two Direct Lake semantic models, and a two-page Power BI report are implemented. The report and semantic-model deliverables have been uploaded as compressed archives. The unpacked PBIP project structure is not yet committed. The Fabric pipelines have completed successful independent runs but are still triggered separately; automated end-to-end orchestration is not yet implemented.
+**Status:** The medallion processing layer, separate Data Quality pipeline, two Direct Lake semantic models, and a two-page Power BI report are implemented. The complete Power BI Project (PBIP), including the report and semantic-model components, has been uploaded as `power-bi/NYC Taxi Analytics.rar`. The archive is the repository's packaged PBIP deliverable; its contents are not individually browsable in GitHub. The Fabric pipelines have completed successful independent runs but are still triggered separately; automated end-to-end orchestration is not yet implemented.
 
 ### Technology
 
@@ -94,16 +94,16 @@ project-01-fabric-data-engineering/
 The repository currently contains:
 - Exported medallion, Data Quality, and Gold fact/date-dimension notebooks, plus an older exploratory ingestion notebook.
 - ZIP exports of both Fabric pipelines.
-- A compressed Power BI report archive at `project-01-fabric-data-engineering/power-bi/NYC Taxi Analytics.rar`.
-- A compressed semantic-model archive at `project-01-fabric-data-engineering/Semantic Models/NYC Taxi Analytics.SemanticModel.rar`.
-- A reserved `power-bi/nyc-taxi-analytics/` directory for the unpacked PBIP source. The complete `.pbip`, `.Report`, and `.SemanticModel` folder structure is not yet committed there.
+- A complete PBIP package at `project-01-fabric-data-engineering/power-bi/NYC Taxi Analytics.rar`, containing the report and semantic-model project components.
+- A separate semantic-model archive at `project-01-fabric-data-engineering/Semantic Models/NYC Taxi Analytics.SemanticModel.rar`, retained as an additional standalone export.
+- A `power-bi/nyc-taxi-analytics/` directory containing project documentation. The PBIP contents are stored in the RAR archive rather than expanded into individually browsable GitHub files.
 
 The `.pq` files in `sql/` are Power Query M scripts, not SQL.
 
 ### Next milestones
 
-1. Unpack and commit the complete PBIP project structure, including report and semantic-model definitions.
-2. Verify that the committed PBIP project opens and matches the current Fabric model.
+1. Verify that the uploaded PBIP archive can be extracted and opened, and that its report and semantic-model definitions match the current Fabric artifacts.
+2. Optionally publish the extracted PBIP source structure alongside the archive for file-level review and version history.
 3. Continue validating report measures, date behavior, and Data Quality interactions.
 4. Optimize Data Quality processing and test a parent pipeline with failure/retry handling.
 5. Configure scheduling and downstream refresh only after dependencies and capacity have been validated.
