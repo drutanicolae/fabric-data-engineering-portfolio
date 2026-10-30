@@ -219,7 +219,7 @@ Two exported pipeline definitions are present in `pipelines/`:
 1. `pl_nyc_taxi_medallion`
 2. `pl_nyc_taxi_data_quality`
 
-Both pipelines have completed successful runs independently. They are currently triggered separately and manually. There is no confirmed parent pipeline or automated end-to-end dependency chain.
+Both pipelines have completed successful runs independently and are currently triggered separately and manually. A parent pipeline and automated end-to-end dependency chain are **TBD** because current Fabric capacity is insufficient for reliable orchestration testing.
 
 The intended processing order is:
 
@@ -244,7 +244,7 @@ Gold Direct Lake model        Data Quality profiling
 Operations / Finance report   Data Quality model and report
 ```
 
-Data Quality currently profiles the large Silver dataset and rebuilds its outputs. Fabric Spark capacity throttling has occurred during development. This is why the two pipelines remain independently executable while orchestration, workload optimization, and refresh dependencies are evaluated. Successful independent runs must not be described as an automated end-to-end workflow.
+Data Quality currently profiles the large Silver dataset and rebuilds its outputs. Fabric Spark capacity throttling has occurred during development. The two pipelines therefore remain independently executable and manually triggered. Parent-pipeline orchestration, workload optimization, scheduling, and automated refresh are explicitly **TBD until sufficient Fabric capacity is available**. Successful independent runs must not be described as an automated end-to-end workflow.
 
 ## 9. Repository contents
 
@@ -300,9 +300,7 @@ These results describe specific successful runs. They are not permanent guarante
 2. Optionally commit the extracted PBIP folders alongside the archive to enable file-level review and version history.
 3. Keep this architecture document, the root README, and dated work logs synchronized with material implementation changes.
 4. Continue validating report measures, date filtering, NULL analysis, and the distinction between rule violations and unique affected trips.
-5. Optimize Data Quality processing and assess capacity before scheduling frequent full-table profiling.
-6. Design and test parent-pipeline orchestration, including failure handling and retry behavior.
-7. Configure scheduled execution and downstream refresh only after dependencies and capacity have been validated.
+5. **TBD (capacity-dependent):** optimize Data Quality processing, assess parent-pipeline orchestration and failure/retry behavior, and evaluate scheduled execution and downstream refresh when sufficient Fabric capacity is available.
 
 ## Project principles
 
