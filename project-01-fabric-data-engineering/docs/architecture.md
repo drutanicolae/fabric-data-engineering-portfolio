@@ -208,9 +208,9 @@ The page is designed to complement the overview, not duplicate the ingestion or 
 
 ### 7.3 Power BI source-control status
 
-The repository contains a compressed Power BI report archive under `power-bi/NYC Taxi Analytics.rar` and a separate semantic-model archive under `Semantic Models/NYC Taxi Analytics.SemanticModel.rar`. The `power-bi/nyc-taxi-analytics/` directory is reserved for the unpacked PBIP project structure and currently contains its README.
+The repository contains `power-bi/NYC Taxi Analytics.rar`, which packages the complete PBIP project, including the report and semantic-model components. A separate standalone semantic-model archive is also retained under `Semantic Models/NYC Taxi Analytics.SemanticModel.rar`. The `power-bi/nyc-taxi-analytics/` directory contains documentation for the report.
 
-For maintainable source control, the preferred deliverable is the complete PBIP project structure, including the `.pbip` entry file and its associated report and semantic-model definition folders. A compressed archive is a transport/backup artifact and does not replace the unpacked, reviewable project source. Do not assume that the current RAR archives have been unpacked into the repository.
+The PBIP deliverable has therefore been uploaded to GitHub as a complete archive. GitHub does not display the files inside a RAR as individually reviewable source. For file-level diffs, code review, and easier inspection of TMDL/report definitions, the extracted `.pbip` entry file and its associated `.Report/` and `.SemanticModel/` folders can additionally be committed without replacing the archive.
 
 ## 8. Pipelines, orchestration, and capacity
 
