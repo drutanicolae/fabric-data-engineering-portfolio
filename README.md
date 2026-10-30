@@ -6,7 +6,7 @@ The emphasis is on engineering decisions, rerunnable processing, validation, and
 
 ## Project 01: NYC Yellow Taxi Data Platform
 
-**Status:** The medallion processing layer, separate Data Quality pipeline, two Direct Lake semantic models, and a two-page Power BI report are implemented. The complete Power BI Project (PBIP), including the report and semantic-model components, has been uploaded as `power-bi/NYC Taxi Analytics.rar`. The archive is the repository's packaged PBIP deliverable; its contents are not individually browsable in GitHub. The Fabric pipelines have completed successful independent runs but are still triggered separately; automated end-to-end orchestration is not yet implemented.
+**Status:** The medallion processing layer, separate Data Quality pipeline, two Direct Lake semantic models, and a two-page Power BI report are implemented. The complete Power BI Project (PBIP), including the report and semantic-model components, has been uploaded as `power-bi/NYC Taxi Analytics.rar`. The archive is the repository's packaged PBIP deliverable; its contents are not individually browsable in GitHub. The Fabric pipelines have completed successful independent runs but are still triggered separately. Automated end-to-end orchestration is marked **TBD** because the current Fabric capacity is insufficient for further orchestration and scheduling tests.
 
 ### Technology
 
@@ -76,7 +76,7 @@ Two Fabric pipelines are present:
 - `pl_nyc_taxi_medallion`
 - `pl_nyc_taxi_data_quality`
 
-Both have completed successful independent runs. They are still manually triggered and are not yet connected through a parent pipeline. Fabric Spark capacity throttling has occurred during development, so orchestration and scheduling require further workload and failure-handling tests.
+Both have completed successful independent runs and are manually triggered. A parent pipeline, scheduled execution, and automated end-to-end refresh are **TBD**. Fabric Spark capacity limitations currently prevent reliable testing of these additions.
 
 ### Repository layout
 
@@ -105,8 +105,7 @@ The `.pq` files in `sql/` are Power Query M scripts, not SQL.
 1. Verify that the uploaded PBIP archive can be extracted and opened, and that its report and semantic-model definitions match the current Fabric artifacts.
 2. Optionally publish the extracted PBIP source structure alongside the archive for file-level review and version history.
 3. Continue validating report measures, date behavior, and Data Quality interactions.
-4. Optimize Data Quality processing and test a parent pipeline with failure/retry handling.
-5. Configure scheduling and downstream refresh only after dependencies and capacity have been validated.
+4. **TBD (capacity-dependent):** optimize Data Quality processing and evaluate parent-pipeline orchestration, failure/retry handling, scheduling, and downstream refresh when sufficient Fabric capacity is available.
 
 ## Data source
 
