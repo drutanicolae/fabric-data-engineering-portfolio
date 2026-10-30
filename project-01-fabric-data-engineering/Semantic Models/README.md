@@ -24,6 +24,6 @@ This folder stores semantic-model deliverables for the NYC Yellow Taxi Fabric pr
 
 - `NYC Taxi Analytics.SemanticModel.rar` is the semantic-model archive currently stored in this folder.
 
-The archive is a packaged artifact. For reviewable source control, retain the extracted semantic-model definition files (for example, TMDL files and model metadata) in the repository when available. Verify that the exported model corresponds to the current Fabric model before replacing an existing version.
+The standalone RAR is retained as an additional semantic-model export. The complete PBIP archive, including its report and semantic-model components, is stored at `../power-bi/NYC Taxi Analytics.rar`. The PBIP archive is the main packaged report deliverable. For reviewable, file-level source control, the extracted semantic-model definition files (for example, TMDL files and model metadata) can additionally be committed. Verify that exported definitions correspond to the current Fabric model before replacing an existing version.
 
 The Power BI report and its PBIP project are documented in [the Power BI project folder](../power-bi/nyc-taxi-analytics/README.md). See also the [architecture document](../docs/architecture.md).
