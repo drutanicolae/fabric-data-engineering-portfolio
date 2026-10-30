@@ -1,180 +1,112 @@
 # Microsoft Fabric Data Engineering & Analytics Portfolio
 
-A hands-on Microsoft Fabric data engineering and analytics project built on public NYC Yellow Taxi trip records. The portfolio demonstrates a complete analytical workflow across data ingestion, medallion architecture, PySpark transformations, data-quality profiling, Direct Lake semantic models, and Power BI reporting.
+A hands-on Microsoft Fabric data engineering and analytics project built on public NYC Yellow Taxi trip records. The portfolio demonstrates repeatable ingestion, a Bronze/Silver/Gold Lakehouse architecture, PySpark transformations, data-quality profiling, Direct Lake semantic models, and Power BI reporting at scale.
 
-The emphasis is on engineering decisions, repeatability, validation, and transparent documentation rather than a standalone dashboard.
+The emphasis is on engineering decisions, rerunnable processing, validation, and transparent documentation rather than a standalone dashboard.
 
 ## Project 01: NYC Yellow Taxi Data Platform
 
-**Status:** The Bronze/Silver/Gold processing layer, separate Data Quality pipeline, and two Direct Lake semantic models are implemented. The Power BI report has been developed with Overview and Data Quality pages. GitHub publication of the complete Power BI project and further documentation/validation are in progress. The Fabric pipelines are still triggered independently; automated end-to-end orchestration is not yet implemented.
+**Status:** The medallion processing layer, separate Data Quality pipeline, two Direct Lake semantic models, and a two-page Power BI report are implemented. The report and semantic-model deliverables have been uploaded as compressed archives. The unpacked PBIP project structure is not yet committed. The Fabric pipelines have completed successful independent runs but are still triggered separately; automated end-to-end orchestration is not yet implemented.
 
 ### Technology
 
 - Microsoft Fabric Lakehouse and Data Pipelines
 - PySpark notebooks and Spark SQL
-- Delta Lake tables and Parquet source data
-- Incremental source-file processing with JSON manifests
+- Delta Lake and Parquet
+- JSON manifests for incremental source-file tracking
 - Bronze / Silver / Gold medallion architecture
 - Direct Lake semantic models
-- Power BI Desktop project format (PBIP) for report/model source control
+- Power BI Desktop and Power BI Project (PBIP)
 - Git and GitHub
 
-### Architecture and implementation
+### Data platform
 
-#### Bronze: ingestion and source tracking
+The project ingests public NYC TLC Yellow Taxi monthly Parquet files. The currently verified inventory contains 20 monthly files from January 2025 through August 2026.
 
-- Tracks monthly NYC TLC Yellow Taxi Parquet files.
-- Uses a JSON manifest and source metadata to identify new, changed, and unchanged files.
-- Stages downloads and validates file sizes before promoting them to the Bronze area.
-- Avoids downloading unchanged source files on every run.
-
-The latest recorded manifest check found 20 available monthly files, all 20 unchanged, with no failed downloads. The currently verified source range is January 2025 to August 2026. Later months are not included in the recorded dataset.
-
-#### Silver: validated trip data
-
-- Combines monthly source files while handling schema differences.
-- Applies the chronological integrity rule:
-
-```text
-tpep_dropoff_datetime >= tpep_pickup_datetime
-```
-
-- Tracks processing by source file and supports reprocessing changed months without blindly appending duplicate data.
-- Retains unusual financial and trip values for investigation instead of silently removing them.
-
-Latest recorded result: **78,423,712 rows** in `yellow_taxi_silver`.
-
-#### Gold: analytics-ready data
-
-- Builds `yellow_taxi_gold` from Silver.
-- Uses source-file processing metadata and versioned transformation logic.
-- Precomputes trip duration and grouped distance/duration bins in Fabric, reducing the need for expensive row-level calculated columns in Power BI.
-- Includes the fields `TripDurationSeconds`, `TripDistanceBin`, `TripDistanceBinSort`, `TripDurationBin`, and `TripDurationBinSort`.
-- Includes a separate `TaxiKeyStatistics` table with dataset-level metrics such as trip count, median and maximum duration, zero-duration and zero-distance counts, and median distance.
-
-Latest recorded result: **78,423,712 rows** in `yellow_taxi_gold`, matching Silver.
-
-The Gold model also contains a `DimDate` table and a `FactTaxiTrips` fact table. The active date relationship uses `DimDate[DateKey]` to `FactTaxiTrips[PickupDateKey]`. The latest validation recorded 9,375 date rows and confirmed that all fact pickup-date keys were covered by the date dimension. The date dimension currently spans 2001-01-01 to 2026-09-01; historical source records outside the main 2025-2026 analysis period should be treated carefully in time-based reporting.
-
-#### Data Quality: profiling and exception analysis
-
-A separate notebook and pipeline profile the Silver dataset and create dedicated Delta outputs:
-
-| Table | Purpose |
-|---|---|
-| `dim_dq_rule` | Rule catalogue, severity, conditions, and interpretation |
-| `dq_summary` | Rule-level issue counts and percentages |
-| `dq_exceptions` | Trip records that violate one or more configured rules |
-| `dq_rule_counts` | Compact count by rule, including zero-result rules |
-| `dq_exception_rule_bridge` | One row per exception-to-rule association |
-
-The Data Quality work also includes column-level NULL profiling. The latest recorded profile identified high missing-value rates in fields such as `request_source`, `passenger_count`, `RatecodeID`, `store_and_fwd_flag`, `congestion_surcharge`, and `Airport_fee`. Missing values are exposed for analysis rather than automatically replaced with zero.
-
-Latest recorded rule findings include:
-
-| Finding | Rows |
+| Layer / output | Latest recorded result |
 |---|---:|
-| Negative fare amount | 3,005,888 |
-| Negative total amount | 1,135,505 |
-| Negative tip amount | 2,576 |
-| Negative trip distance | 0 |
-| Zero trip distance | 2,355,175 |
-| Zero trip duration | 915,742 |
-| Trip duration over three hours | 28,528 |
-| NULL fare amount | 0 |
-| NULL total amount | 0 |
+| Bronze source files tracked | 20 |
+| Silver table | 78,423,712 rows |
+| Gold table | 78,423,712 rows |
+| Gold fact table | 78,423,712 rows |
+| Gold date dimension | 9,375 rows |
+| Data Quality rules | 9 |
 
-These are investigation signals, not automatic proof that a trip is invalid. Negative financial amounts may have legitimate explanations, such as reversals or adjustments, which require business confirmation. The three-hour duration threshold is a project-defined review threshold, not an official TLC rule.
+**Bronze**
+- Checks monthly source files against a JSON manifest.
+- Identifies new, changed, and unchanged files using available source metadata.
+- Stages and validates downloads before promoting them to Bronze.
 
-Rule counts overlap because one trip can violate multiple rules. They must not be summed to estimate unique affected trips. The exception-row count and exception-to-rule association count are also different measures.
+**Silver**
+- Aligns monthly schemas.
+- Applies the chronological integrity rule `tpep_dropoff_datetime >= tpep_pickup_datetime`.
+- Tracks processing by source file and supports per-file replacement.
+- Retains unusual financial and trip values for investigation.
+
+**Gold**
+- Produces the analytical trip table and dimensional reporting structures.
+- Precomputes trip duration and grouped distance/duration bins in Fabric.
+- Includes `TaxiKeyStatistics` for dataset-level metrics such as median/max duration, zero-duration and zero-distance statistics, and median distance.
+
+**Data Quality**
+- Produces rule definitions, rule summaries, exception details, rule counts, and an exception-to-rule bridge.
+- Profiles NULL counts and percentages across selected columns, including rows with multiple nullable fields simultaneously missing.
+- Retains anomalies for investigation rather than automatically deleting or overwriting them.
+
+Rule findings include negative fares, negative total amounts, negative tips, zero-distance trips, zero-duration trips, and trips longer than the project-defined three-hour review threshold. These counts overlap and must not be summed to estimate unique affected trips. They are investigation signals, not automatic proof of invalid records.
+
+See [the architecture document](project-01-fabric-data-engineering/docs/architecture.md) for the detailed design, table definitions, recorded results, modeling constraints, and limitations.
 
 ### Semantic models and Power BI
 
-Two Direct Lake semantic models support separate analytical purposes:
+Two Direct Lake semantic models support different analytical purposes:
 
-- **Gold semantic model — `sm_nyc_taxi_gold`:** operational and financial analysis based on the Gold fact and dimension tables.
-- **Data Quality semantic model — `sm_nyc_taxi_data_quality`:** quality monitoring and investigation using the dedicated Data Quality tables and rule dimension.
+- `sm_nyc_taxi_gold`: operational and financial analysis using the Gold fact and dimension tables.
+- `sm_nyc_taxi_data_quality`: quality monitoring and investigation using the Data Quality outputs and rule dimension.
 
-The Power BI report currently includes:
+The **NYC Taxi Analytics** Power BI report contains two pages:
 
-**NYC Taxi Analytics Overview**
-- Core KPIs such as total trips, fare revenue, average distance, average duration, average fare per trip, and tip rate.
-- Date filtering and trend analysis.
-- Payment-type distribution.
-- Operational and financial overview.
+1. **NYC Taxi Analytics Overview** — trip volume, fare revenue, average distance and duration, average fare, tip rate, trends, payment-type distribution, and date filtering.
+2. **Data Quality** — rule-level issue counts and percentages, NULL profiling, and trip distance/duration anomalies.
 
-**Data Quality**
-- Data-quality issue counts and percentages.
-- Rule-level findings and severity.
-- NULL profiling and missing-value analysis.
-- Trip duration and distance anomalies.
-- Supporting detail for interpreting data-quality findings.
+### Orchestration status
 
-The report is being prepared for source control in Power BI Project (PBIP) format. The intended repository location is `project-01-fabric-data-engineering/power-bi/`. The complete PBIP folder structure, including the report and semantic-model definitions, should be committed together when the export is ready. Do not treat the Power BI publication or a Power BI App as complete until deployment and sharing have been validated.
+Two Fabric pipelines are present:
 
-### Current scale and recorded validation
+- `pl_nyc_taxi_medallion`
+- `pl_nyc_taxi_data_quality`
 
-| Item | Latest recorded result |
-|---|---:|
-| Monthly source files tracked | 20 |
-| Silver rows | 78,423,712 |
-| Gold rows | 78,423,712 |
-| Gold fact rows | 78,423,712 |
-| Gold date dimension rows | 9,375 |
-| Data Quality rules | 9 |
-
-Validation performed during development includes:
-
-- Source-file manifest checks for new, changed, and unchanged monthly files.
-- Silver and Gold row-count reconciliation.
-- Timestamp integrity filtering during Silver processing.
-- Gold fact date-key coverage checks.
-- Data Quality rule-count reconciliation against the summary output.
-- Data Quality relationship and model checks during semantic-model development.
-
-These are recorded results from specific runs, not a guarantee that future source files or refreshes will produce identical counts.
-
-### Orchestration and operational considerations
-
-Two Fabric pipelines currently exist:
-
-1. `pl_nyc_taxi_medallion` — runs the Bronze/Silver/Gold processing workflow.
-2. `pl_nyc_taxi_data_quality` — runs the Data Quality profiling workflow.
-
-Both have completed successful independent runs. They are currently triggered separately and manually. A parent pipeline, scheduled end-to-end execution, and fully automated downstream refresh have not yet been confirmed as implemented.
-
-The Data Quality workload scans a large Silver dataset. Fabric Spark capacity throttling has occurred during development, so execution order, workload optimization, and capacity behavior need to be considered before introducing frequent scheduled runs.
+Both have completed successful independent runs. They are still manually triggered and are not yet connected through a parent pipeline. Fabric Spark capacity throttling has occurred during development, so orchestration and scheduling require further workload and failure-handling tests.
 
 ### Repository layout
 
 ```text
 project-01-fabric-data-engineering/
-├── docs/
-│   ├── architecture.md
-│   └── work-log-2026-10-14.md
-├── notebooks/
-├── pipelines/
-├── power-bi/
-├── screenshots/
-└── sql/
+├── docs/                 # Architecture and dated work logs
+├── notebooks/            # Fabric notebook exports
+├── pipelines/            # Exported Fabric pipeline definitions
+├── power-bi/             # Power BI report archive and PBIP project folder
+├── Semantic Models/      # Semantic-model archive and documentation
+├── screenshots/          # Fabric and Power BI evidence
+└── sql/                  # Power Query M dimension scripts (.pq)
 ```
 
-- `docs/`: architecture, implementation notes, and work logs.
-- `notebooks/`: Fabric notebook exports. Check each notebook's provenance and version before treating it as the current implementation.
-- `pipelines/`: pipeline definitions and related project artifacts.
-- `power-bi/`: Power BI report and semantic-model project files.
-- `screenshots/`: evidence from the Fabric workspace, Lakehouse, pipelines, notebooks, and semantic models.
-- `sql/`: currently includes Power Query M dimension scripts; the folder name does not mean every file in it is SQL.
+The repository currently contains:
+- Exported medallion, Data Quality, and Gold fact/date-dimension notebooks, plus an older exploratory ingestion notebook.
+- ZIP exports of both Fabric pipelines.
+- A compressed Power BI report archive at `project-01-fabric-data-engineering/power-bi/NYC Taxi Analytics.rar`.
+- A compressed semantic-model archive at `project-01-fabric-data-engineering/Semantic Models/NYC Taxi Analytics.SemanticModel.rar`.
+- A reserved `power-bi/nyc-taxi-analytics/` directory for the unpacked PBIP source. The complete `.pbip`, `.Report`, and `.SemanticModel` folder structure is not yet committed there.
+
+The `.pq` files in `sql/` are Power Query M scripts, not SQL.
 
 ### Next milestones
 
-1. Complete the PBIP export and commit the full report and semantic-model project structure.
-2. Reconcile this README and the architecture document with the latest committed Fabric and Power BI artifacts.
-3. Validate the final Power BI measures, filters, date behavior, and Data Quality interactions.
-4. Optimize Data Quality processing where practical and document its capacity requirements.
-5. Test a parent pipeline that runs medallion processing before Data Quality, including failure and retry behavior.
-6. Configure scheduling and downstream refresh only after dependencies and capacity have been tested.
-7. Add current notebook and pipeline exports, with clear versioning and documentation.
+1. Unpack and commit the complete PBIP project structure, including report and semantic-model definitions.
+2. Verify that the committed PBIP project opens and matches the current Fabric model.
+3. Continue validating report measures, date behavior, and Data Quality interactions.
+4. Optimize Data Quality processing and test a parent pipeline with failure/retry handling.
+5. Configure scheduling and downstream refresh only after dependencies and capacity have been validated.
 
 ## Data source
 
@@ -185,9 +117,4 @@ NYC Taxi & Limousine Commission (TLC) trip records:
 
 ## Project principles
 
-- Preserve source traceability and processing metadata.
-- Make transformations repeatable and safe to rerun.
-- Validate row counts, keys, relationships, and rule outputs.
-- Keep data-quality anomalies visible until their business meaning is understood.
-- Separate implemented functionality from planned work.
-- Keep the repository aligned with the actual Fabric and Power BI implementation.
+Preserve source traceability, make transformations rerunnable, validate outputs, keep anomalies visible until their business meaning is understood, and distinguish implemented functionality from planned work.
