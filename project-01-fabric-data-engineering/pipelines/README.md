@@ -15,7 +15,7 @@ Files:
 
 ## Execution design
 
-The medallion and Data Quality pipelines are separate. They have been triggered manually and validated independently. A parent pipeline that automatically runs the medallion workflow before Data Quality is not yet confirmed as implemented.
+The medallion and Data Quality pipelines are separate. They have been triggered manually and validated independently. A parent pipeline that automatically runs the medallion workflow before Data Quality is **TBD**. It is deferred because current Fabric capacity is insufficient for reliable implementation and testing.
 
 The intended dependency is:
 
@@ -25,7 +25,7 @@ Bronze ingestion -> Silver transformation -> Gold transformation
                                       +-> Data Quality profiling
 ```
 
-The Data Quality notebook profiles a large Silver dataset. Fabric Spark capacity throttling has occurred during development, so scheduling and orchestration should only be added after workload, capacity, retry, and failure behavior are tested.
+The Data Quality notebook profiles a large Silver dataset. Fabric Spark capacity throttling has occurred during development. Parent-pipeline orchestration, scheduling, and automated refresh are deferred (**TBD**) until sufficient capacity is available to test workload, retry, and failure behavior.
 
 ## Import and maintenance notes
 
