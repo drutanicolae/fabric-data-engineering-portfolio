@@ -296,8 +296,8 @@ These results describe specific successful runs. They are not permanent guarante
 
 ## 11. Current limitations and next milestones
 
-1. Unpack and commit the complete PBIP report project structure so the report and semantic-model definitions are reviewable as text.
-2. Validate that the committed PBIP project opens correctly and that its semantic-model definitions match the current Direct Lake model.
+1. Extract and validate the uploaded PBIP archive, confirming that the report and semantic-model definitions open and match the current Fabric artifacts.
+2. Optionally commit the extracted PBIP folders alongside the archive to enable file-level review and version history.
 3. Keep this architecture document, the root README, and dated work logs synchronized with material implementation changes.
 4. Continue validating report measures, date filtering, NULL analysis, and the distinction between rule violations and unique affected trips.
 5. Optimize Data Quality processing and assess capacity before scheduling frequent full-table profiling.
