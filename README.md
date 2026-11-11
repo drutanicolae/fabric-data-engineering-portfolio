@@ -107,6 +107,33 @@ The `.pq` files in `sql/` are Power Query M scripts, not SQL.
 3. Continue validating report measures, date behavior, and Data Quality interactions.
 4. **TBD (capacity-dependent):** optimize Data Quality processing and evaluate parent-pipeline orchestration, failure/retry handling, scheduling, and downstream refresh when sufficient Fabric capacity is available.
 
+## Project 02: NYC 311 Service Operations Analytics
+
+**Status:** API source assessment, monthly partition planning, batch extraction, cursor-based pagination, retry handling, Bronze validation, manifest tracking, checkpoints, and recovery logic are implemented. The bulk extraction function is prepared but the full 83-month run has not yet been completed. As of the current project checkpoint, January and February 2020 are complete: **368,393 records** extracted and reconciled against the source-count snapshot. Silver, Gold, semantic models, and Power BI reporting are not yet implemented.
+
+### Objective
+
+Build an end-to-end NYC 311 analytics platform in Microsoft Fabric using the NYC Open Data REST API and approximately 23.1 million service-request records. The target is a reproducible Bronze/Silver/Gold Lakehouse pipeline, with operational and service-demand analysis in Power BI.
+
+### How this differs from Project 01
+
+- **Project 01 (NYC Taxi):** ingests monthly Parquet files already published by the source, then processes them with Spark.
+- **Project 02 (NYC 311):** implements API ingestion from scratch, including monthly time partitions, 10,000-row batches, composite cursor pagination, retries, JSONL Bronze files, checkpoints, and recovery after interrupted runs.
+
+Together, the projects demonstrate two different ingestion patterns: file-based bulk ingestion and resilient API-based ingestion.
+
+### Current implementation
+
+- Source: NYC Open Data dataset `erm2-nwe9`.
+- Snapshot inventory: 83 monthly partitions from January 2020 through November 2026; November 2026 is partial.
+- Snapshot total: 23,100,861 records, recorded on 2026-11-11.
+- Completed Bronze partitions: January and February 2020.
+- Extracted and reconciled records: 368,393.
+- Remaining work: complete and reconcile Bronze extraction, then implement Silver, Gold, Data Quality, orchestration, semantic model, and Power BI.
+
+See [Project 02 README](project-02-nyc-311-service-operations-analytics/README.md) and its [architecture notes](project-02-nyc-311-service-operations-analytics/docs/architecture.md).
+
+
 ## Data source
 
 NYC Taxi & Limousine Commission (TLC) trip records:
