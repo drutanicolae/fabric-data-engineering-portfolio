@@ -109,30 +109,91 @@ The `.pq` files in `sql/` are Power Query M scripts, not SQL.
 
 ## Project 02: NYC 311 Service Operations Analytics
 
-**Status:** API source assessment, monthly partition planning, batch extraction, cursor-based pagination, retry handling, Bronze validation, manifest tracking, checkpoints, and recovery logic are implemented. The bulk extraction function is prepared but the full 83-month run has not yet been completed. As of the current project checkpoint, January and February 2020 are complete: **368,393 records** extracted and reconciled against the source-count snapshot. Silver, Gold, semantic models, and Power BI reporting are not yet implemented.
+**Status (2026-11-16):** The complete 83-month Bronze extraction has been reconciled against the current NYC Open Data API count snapshot. The project now includes a monthly ingestion orchestrator, a validated Late Arrivals Engine, and initial design and validation work for an Updated Records Engine. Silver, Gold, semantic models, Power BI reporting, and scheduled Fabric Pipeline orchestration are not yet implemented.
 
 ### Objective
 
-Build an end-to-end NYC 311 analytics platform in Microsoft Fabric using the NYC Open Data REST API and approximately 23.1 million service-request records. The target is a reproducible Bronze/Silver/Gold Lakehouse pipeline, with operational and service-demand analysis in Power BI.
+Build an end-to-end NYC 311 analytics platform in Microsoft Fabric using the NYC Open Data REST API and approximately 23.16 million service-request records.
 
 ### How this differs from Project 01
 
-- **Project 01 (NYC Taxi):** ingests monthly Parquet files already published by the source, then processes them with Spark.
-- **Project 02 (NYC 311):** implements API ingestion from scratch, including monthly time partitions, 10,000-row batches, composite cursor pagination, retries, JSONL Bronze files, checkpoints, and recovery after interrupted runs.
+- **Project 01 (NYC Taxi):** ingests monthly Parquet files already published by the source, downloads them to Bronze, and processes them with Spark.
+- **Project 02 (NYC 311):** implements API ingestion from scratch, including monthly partitions, 10,000-row batches, composite cursor pagination, retries, JSONL Bronze files, checkpoints, recovery, and incremental change detection.
 
-Together, the projects demonstrate two different ingestion patterns: file-based bulk ingestion and resilient API-based ingestion.
+Together, the projects demonstrate file-based bulk ingestion and resilient API-based ingestion.
 
-### Current implementation
+### Current verified Bronze state
 
-- Source: NYC Open Data dataset `erm2-nwe9`.
-- Snapshot inventory: 83 monthly partitions from January 2020 through November 2026; November 2026 is partial.
-- Snapshot total: 23,100,861 records, recorded on 2026-11-11.
-- Completed Bronze partitions: January and February 2020.
-- Extracted and reconciled records: 368,393.
-- Remaining work: complete and reconcile Bronze extraction, then implement Silver, Gold, Data Quality, orchestration, semantic model, and Power BI.
+| Metric | Result |
+|---|---:|
+| Monthly partitions | 83 |
+| API expected records | 23,162,984 |
+| Normal extracted records | 23,162,944 |
+| Late-arrival records | 40 |
+| Total Bronze records | 23,162,984 |
+| Reconciliation difference | 0 |
 
-See [Project 02 README](project-02-nyc-311-service-operations-analytics/README.md) and its [architecture notes](project-02-nyc-311-service-operations-analytics/docs/architecture.md).
+The reconciliation snapshot is dated 2026-11-16. NYC Open Data is a live source, so these counts are a dated checkpoint, not a permanent guarantee.
 
+### Implemented ingestion capabilities
+
+- Monthly partition discovery based on `created_date`.
+- 10,000-row extraction batches and deterministic composite cursor pagination using `created_date` and `unique_key`.
+- Retry handling, per-month checkpoints, manifest tracking, and interrupted-run recovery.
+- Bronze JSONL persistence and validation.
+- A separate orchestrator for month discovery, manifest reconciliation, and resumable extraction.
+
+### Incremental processing
+
+**Late Arrivals Engine: implemented and validated**
+
+The `run_late_arrivals_engine()` workflow uses Socrata's `:created_at` field to detect records newly created in the source after the original monthly extraction, including records whose `created_date` belongs to a historical month.
+
+- Dedicated watermark: `Files/metadata/late_arrivals_watermark.json`.
+- Seven-day overlap and keyset pagination.
+- Deduplication by `unique_key`.
+- Explicit alignment to the 44-column Bronze business schema.
+- Separate late-arrival JSONL files; original batch files are not overwritten.
+- Manifest and watermark persistence checks.
+
+The latest overlap run retrieved 91,809 API records and found no additional records missing from Bronze. The 40 previously recovered late arrivals remain reconciled: 3 from August, 3 from September, and 34 from November 2026. A controlled positive-insert component test validated schema alignment, write/read behavior, manifest and watermark persistence, and reconciliation using temporary test artifacts.
+
+**Updated Records Engine: in progress**
+
+This separate workflow uses Socrata's `:updated_at` field to identify existing service requests whose business fields have changed.
+
+- Dedicated watermark: `Files/metadata/updated_records_watermark.json`.
+- Seven-day overlap configured; initial watermark intentionally remains unset until the first extraction is validated.
+- Candidate records are matched to Bronze by `unique_key`.
+- The source partition is resolved using `created_date`, not `:updated_at`.
+- All 44 business fields are compared using null-safe equality.
+- Only actual business changes should become update snapshots; a metadata timestamp change alone is insufficient.
+
+A 20-record sample matched all 20 records to their correct Bronze partitions. All 20 showed business-field differences, including status, close date, and resolution fields. One record created in August and updated in November confirmed that comparison must read the original `created_date` partition. The initial seven-day API extraction is still running; its final volume and production snapshot-writing logic are not yet validated.
+
+### Target architecture
+
+```text
+NYC Open Data API
+       |
+NYC 311 Orchestrator
+       |
+       +---- Backfill / New Monthly Partitions
+       |
+       +---- Late Arrivals Engine (:created_at)
+       |
+       +---- Updated Records Engine (:updated_at)
+                       |
+                Change Snapshots
+                       |
+                  Silver MERGE
+                       |
+                 Gold / Power BI
+```
+
+The original Backfill Initial notebook remains separate from the ongoing orchestrator and incremental engines. Next milestones are to complete and validate Updated Records extraction, implement update snapshots and Silver MERGE, then build Gold, Data Quality, the semantic model, Power BI reporting, and Fabric Pipeline orchestration.
+
+See the [Project 02 README](project-02-nyc-311-service-operations-analytics/README.md), [architecture notes](project-02-nyc-311-service-operations-analytics/docs/architecture.md), and [2026-11-16 work log](project-02-nyc-311-service-operations-analytics/docs/work-log-2026-11-16.md).
 
 ## Data source
 
